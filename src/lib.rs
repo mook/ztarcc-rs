@@ -6,6 +6,9 @@ use jieba_rs::Jieba;
 use once_cell::sync::Lazy;
 use trie_rs::map::Trie;
 
+#[cfg(feature = "wasm")]
+use wasm_bindgen::prelude::*;
+
 type Dictionary = Trie<u8, String>;
 
 include!(concat!(env!("OUT_DIR"), "/dicts.rs"));
@@ -95,6 +98,45 @@ pub fn convert(from: Script, to: Script, input: &str) -> Result<Vec<String>> {
     let result = words.filter_map(move |word| convert_word(keys.iter(), word).ok());
 
     Ok(result.collect())
+}
+
+#[cfg(feature = "wasm")]
+pub struct JSError {
+    val: String,
+}
+
+#[cfg(feature = "wasm")]
+impl Into<JsValue> for JSError {
+    fn into(self) -> JsValue {
+        JsValue::from_str(self.val.as_str())
+    }
+}
+
+#[cfg(feature = "wasm")]
+impl<T: ToString> From<T> for JSError {
+    fn from(value: T) -> Self {
+        JSError {
+            val: value.to_string(),
+        }
+    }
+}
+
+#[cfg(feature = "wasm")]
+#[wasm_bindgen(js_name = convert)]
+pub fn convert_export(from: &str, to: &str, input: &str) -> std::result::Result<String, JSError> {
+    let from_script = match from {
+        "cn" => Script::CN,
+        "tw" => Script::TW,
+        "hk" => Script::HK,
+        _ => return Err(format!("invalid from script {}", from).into()),
+    };
+    let to_script = match to {
+        "cn" => Script::CN,
+        "tw" => Script::TW,
+        "hk" => Script::HK,
+        _ => return Err(format!("invalid to script {}", to).into()),
+    };
+    Ok(convert(from_script, to_script, input)?.join(""))
 }
 
 #[cfg(test)]

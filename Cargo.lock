@@ -1577,5 +1577,6 @@ dependencies = [
  "postcard",
  "rayon",
  "trie-rs",
+ "wasm-bindgen",
  "wasm-bindgen-test",
 ]

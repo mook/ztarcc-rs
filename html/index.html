@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<title>ztarcc-rs Demo</title>
+<style>
+    div {
+        display: grid;
+        grid:
+            "label label "  min-content
+            "input output" 1fr
+            "from  to    " min-content
+            / 1fr 1fr;
+        height: 80vh;
+    }
+    #lbl-input {
+        grid-area: label;
+    }
+    #input {
+        grid-area: input;
+    }
+    #output {
+        grid-area: output;
+    }
+    #lbl-from {
+        grid-area: from;
+    }
+    #lbl-to {
+        grid-area: to;
+    }
+</style>
+<h1>ztarcc-rs Demo</h1>
+<div>
+    <label id="lbl-input" for="input">
+        Text to convert:
+    </label>
+    <textarea id="input">我能吞下玻璃而不伤身体。</textarea>
+    <label id="output"></label>
+    <label id="lbl-from">
+        Source script:
+        <select id="from">
+            <option value="cn" selected>Simplified Chinese</option>
+            <option value="tw">Traditional Chinese (Taiwan)</option>
+            <option value="hk">Traditional Chinese (Hong Kong)</option>
+        </select>
+    </label>
+    <label id="lbl-to">
+        Target script:
+        <select id="to">
+            <option value="cn">Simplified Chinese</option>
+            <option value="tw" selected>Traditional Chinese (Taiwan)</option>
+            <option value="hk">Traditional Chinese (Hong Kong)</option>
+        </select>
+    </label>
+</div>
+<script type="module">
+    import init, { convert } from './ztarcc_rs.js';
+    async function run() {
+        await init();
+        const input = document.getElementById("input").value;
+        const from = document.getElementById("from").value;
+        const to = document.getElementById("to").value;
+        document.getElementById('output').textContent = convert(from, to, input);
+    }
+    document.getElementById("input").addEventListener("input", run);
+    run();
+</script>
+</html>
