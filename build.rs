@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use miniz_oxide::deflate::compress_to_vec;
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, Write};
 use std::{env, fs, io, path};
@@ -93,10 +94,11 @@ fn build_all_dicts(out_dir: &path::Path) -> Result<Vec<String>> {
         }
     }
 
-    let all_keys: Vec<_> = dict_definitions
+    let mut all_keys = HashSet::<String>::new();
+
+    let result = dict_definitions
         .iter()
-        .map(|(out_name, in_names)| -> Result<HashSet<String>> {
-            let mut keys = HashSet::<String>::new();
+        .map(|(out_name, in_names)| -> Result<()> {
             let mut builder = TrieBuilder::<u8, String>::new();
             for in_name in in_names {
                 let from_dict = dicts.get(in_name).ok_or(anyhow!(format!(
@@ -106,7 +108,7 @@ fn build_all_dicts(out_dir: &path::Path) -> Result<Vec<String>> {
                 from_dict
                     .iter()
                     .for_each(|(k, v)| builder.push(k, v.to_owned()));
-                keys.extend(
+                all_keys.extend(
                     from_dict
                         .keys()
                         .filter(|k| k.len() > 3)
@@ -114,25 +116,33 @@ fn build_all_dicts(out_dir: &path::Path) -> Result<Vec<String>> {
                 );
             }
             let mut out_path = out_dir.join(out_name);
-            out_path.set_extension("postcard");
-            let out_file = fs::File::create(out_path).context(format!(
+            out_path.set_extension("zpostcard");
+            let mut out_file = fs::File::create(out_path).context(format!(
                 "could not open dictionary output for {0}",
                 out_name
             ))?;
             let dict = builder.build();
-            postcard::to_io(&dict, out_file)
-                .context(format!("writing dictionary data {0}", out_name))?;
+            let serialized_dict = postcard::to_stdvec(&dict)
+                .context(format!("serializing dictionary {}", out_name))?;
+            let compressed_dict = compress_to_vec(&serialized_dict, 6);
+            out_file
+                .write_all(&compressed_dict)
+                .context(format!("writing compressed dictionary {}", out_name))?;
 
-            Ok(keys)
+            Ok(())
         })
-        .collect();
-    let mut merged_keys = HashSet::<String>::new();
-    for keys in all_keys {
-        merged_keys.extend(keys?);
+        .find(|result| result.is_err());
+    if let Some(v) = result {
+        v?;
     }
-    let keys_path = out_dir.join("keys.postcard");
-    let keys_file = fs::File::create(keys_path).context(anyhow!("could not open keys output"))?;
-    postcard::to_io(&merged_keys, keys_file)?;
+    let keys_vec: Vec<_> = all_keys.iter().collect();
+    let serialized_keys = postcard::to_stdvec(&keys_vec).context("serializing keys")?;
+    let compressed_keys = compress_to_vec(&serialized_keys, 6);
+    let keys_path = out_dir.join("keys.zpostcard");
+    let mut keys_file = fs::File::create(keys_path).context("opening keys output")?;
+    keys_file
+        .write_all(&compressed_keys)
+        .context("writing compressed keys")?;
 
     Ok(dict_definitions.keys().map(|k| k.to_string()).collect())
 }
@@ -144,33 +154,58 @@ fn write_source(out_dir: &path::Path, names: &Vec<String>) -> Result<()> {
 
     writeln!(
         out_file,
-        "#[derive(PartialEq,Eq,Hash,Debug,Clone,Copy,enum_map::Enum)]"
+        r##"
+        #[derive(PartialEq,Eq,Hash,Debug,Clone,Copy,enum_map::Enum)]
+        /// DictionaryKeys lists the available dictionary types
+        enum DictionaryKeys {{
+    "##
     )?;
-    writeln!(
-        out_file,
-        "/// DictionaryKeys lists the available dictionary types"
-    )?;
-    writeln!(out_file, "enum DictionaryKeys {{")?;
     for name in names {
         writeln!(out_file, "  {0},", name)?;
     }
-    writeln!(out_file, "}}")?;
     writeln!(
         out_file,
-        "type Dictionaries = enum_map::EnumMap<DictionaryKeys, Dictionary>;"
-    )?;
-    writeln!(out_file)?;
+        r##"
+        }}
 
-    writeln!(out_file, "static DICTIONARIES: once_cell::sync::Lazy<Dictionaries> = once_cell::sync::Lazy::new(|| {{ enum_map::enum_map! {{")?;
+        type Dictionaries = enum_map::EnumMap<DictionaryKeys, Dictionary>;
+
+        static DICTIONARIES: once_cell::sync::Lazy<Dictionaries> = once_cell::sync::Lazy::new(|| {{
+    "##
+    )?;
     for name in names {
-        write!(
+        writeln!(
             out_file,
-            "  DictionaryKeys::{0} => postcard::from_bytes(",
+            r##"
+            #[allow(non_snake_case)]
+            let {0}_bytes = decompress_to_vec(include_bytes!(concat!(env!("OUT_DIR"), "/{0}.zpostcard")))
+                .expect("failed to decompress dictionary {0}");
+        "##,
             name
         )?;
-        writeln!(out_file, "include_bytes!(concat!(env!(\"OUT_DIR\"), \"/{0}.postcard\"))).expect(\"failed to load dictionary {0}\"),", name)?;
     }
-    writeln!(out_file, "}}}});")?;
+    writeln!(
+        out_file,
+        r##"
+            enum_map::enum_map! {{
+    "##
+    )?;
+    for name in names {
+        writeln!(
+            out_file,
+            r##"
+                DictionaryKeys::{0} => postcard::from_bytes(&{0}_bytes).expect("failed to load dictionary {0}"),
+        "##,
+            name
+        )?;
+    }
+    writeln!(
+        out_file,
+        r##"
+            }}
+        }});
+    "##
+    )?;
 
     Ok(())
 }

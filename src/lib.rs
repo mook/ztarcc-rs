@@ -1,8 +1,7 @@
-use std::collections::HashSet;
-
 use anyhow::Result;
 use enum_map::{enum_map, Enum, EnumMap};
 use jieba_rs::Jieba;
+use miniz_oxide::inflate::decompress_to_vec;
 use once_cell::sync::Lazy;
 use trie_rs::map::Trie;
 
@@ -46,9 +45,9 @@ static CONFIGS_FROM_STANDARD: Lazy<EnumMap<Script, DictionaryKeys>> = Lazy::new(
 
 static JIEBA: Lazy<Jieba> = Lazy::new(|| {
     let mut jieba = Jieba::new();
-    let keys: HashSet<String> =
-        postcard::from_bytes(include_bytes!(concat!(env!("OUT_DIR"), "/keys.postcard")))
-            .expect("failed to load extra words");
+    let key_bytes = decompress_to_vec(include_bytes!(concat!(env!("OUT_DIR"), "/keys.zpostcard")))
+        .expect("failed to decompress keys");
+    let keys: Vec<String> = postcard::from_bytes(&key_bytes).expect("failed to load extra words");
     for key in keys {
         jieba.add_word(key.as_str(), None, None);
     }
