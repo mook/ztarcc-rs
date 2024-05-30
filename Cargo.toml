@@ -47,3 +47,4 @@ required-features = ["cli"]
 [profile.release]
 lto = true
 opt-level = "s"
+strip = true

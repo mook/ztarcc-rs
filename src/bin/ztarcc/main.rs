@@ -92,7 +92,7 @@ fn setup() -> Result<()> {
         _ => return Err(anyhow!(format!("Failed to decode from {}", encoding))),
     };
     let lines: Vec<_> = decoded
-        .lines()
+        .split_inclusive('\n')
         .collect::<Vec<_>>()
         .par_iter()
         .map(|line| ztarcc_rs::convert(from_script, to_script, line))
@@ -102,7 +102,6 @@ fn setup() -> Result<()> {
         for chunk in line? {
             output.write_all(chunk.as_bytes())?;
         }
-        output.write_all(&[b'\n'])?;
     }
     Ok(())
 }
