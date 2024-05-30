@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Context, Result};
 use miniz_oxide::deflate::compress_to_vec;
 use std::collections::{HashMap, HashSet};
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Read, Write};
 use std::{env, fs, io, path};
 use trie_rs::map::TrieBuilder;
 
@@ -204,6 +204,25 @@ fn write_source(out_dir: &path::Path, names: &Vec<String>) -> Result<()> {
         r##"
             }}
         }});
+    "##
+    )?;
+
+    let jieba_dict_path =
+        path::Path::new(env!("CARGO_MANIFEST_DIR")).join("jieba-rs/src/data/dict.txt");
+    let mut jieba_dict_file = fs::File::open(jieba_dict_path)?;
+    let mut jieba_dict = Vec::new();
+    jieba_dict_file.read_to_end(&mut jieba_dict)?;
+    let jieba_dict_compressed = compress_to_vec(&jieba_dict, 6);
+    let jieba_compressed_dict_path = out_dir.join("jieba.z");
+    let mut jieba_compressed_dict_file = fs::File::create(jieba_compressed_dict_path)?;
+    jieba_compressed_dict_file.write_all(&jieba_dict_compressed)?;
+    writeln!(
+        out_file,
+        r##"
+            static JIEBA_DICT: once_cell::sync::Lazy<Vec<u8>> = once_cell::sync::Lazy::new(|| {{
+                decompress_to_vec(include_bytes!(concat!(env!("OUT_DIR"), "/jieba.z")))
+                    .expect("failed to decompress jieba dictionary")
+            }});
     "##
     )?;
 

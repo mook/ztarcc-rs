@@ -1,3 +1,6 @@
 [submodule "opencc"]
 	path = opencc
 	url = https://github.com/BYVoid/OpenCC.git
+[submodule "jieba-rs"]
+	path = jieba-rs
+	url = https://github.com/messense/jieba-rs.git

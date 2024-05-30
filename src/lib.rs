@@ -1,3 +1,5 @@
+use std::io::BufReader;
+
 use anyhow::Result;
 use enum_map::{enum_map, Enum, EnumMap};
 use jieba_rs::Jieba;
@@ -44,7 +46,8 @@ static CONFIGS_FROM_STANDARD: Lazy<EnumMap<Script, DictionaryKeys>> = Lazy::new(
 });
 
 static JIEBA: Lazy<Jieba> = Lazy::new(|| {
-    let mut jieba = Jieba::new();
+    let mut jieba_dict_buf = BufReader::new(JIEBA_DICT.as_slice());
+    let mut jieba = Jieba::with_dict(&mut jieba_dict_buf).unwrap();
     let key_bytes = decompress_to_vec(include_bytes!(concat!(env!("OUT_DIR"), "/keys.zpostcard")))
         .expect("failed to decompress keys");
     let keys: Vec<String> = postcard::from_bytes(&key_bytes).expect("failed to load extra words");
